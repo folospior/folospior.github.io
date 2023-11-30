@@ -6,26 +6,25 @@ defaultcontentlanguage = "en"
 
 paginate = 20
 
-disqusShortname = "yourdiscussshortname"
+# disqusShortname = "yourdiscussshortname"
 
 [markup.highlight]
 style = "github-dark"
 
 [params]
-  author = "John Doe"
-  info = "Full Stack DevOps and Magician"
-  description = "John Doe's personal website"
+  author = "folospior"
+  info = "Discord Bot Developer"
+  description = "The personal website of folospior, also known as Folo or fo1o."
   keywords = "blog,developer,personal"
-  avatarurl = "images/avatar.jpg"
-  #gravatar = "john.doe@example.com"
+  avatarurl = "img/avatar.jpg"
 
-  faviconSVG = "/img/favicon.svg"
+  faviconSVG = "img/favicon.svg"
 
   since = 2023
 
   enableTwemoji = true
 
-  colorScheme = ""
+  colorScheme = "dark"
   hidecolorschemetoggle = false
 
   # customCSS = ["css/custom.css"]
@@ -47,8 +46,13 @@ style = "github-dark"
 [[params.social]]
   name = "Discord"
   icon = "fa fa-discord fa-2x"
-  weight = 3
+  weight = 2
   url = "https://discordapp.com/users/808763186811633735"
+[[params.social]]
+    name = "Website Source"
+    icon = "fa fa-globe fa-2x"
+    weight = 3
+    url = "source"
 
 # Menu links
 [[menu.main]]
