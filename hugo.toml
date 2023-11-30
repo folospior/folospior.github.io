@@ -6,8 +6,6 @@ defaultcontentlanguage = "en"
 
 paginate = 20
 
-# disqusShortname = "yourdiscussshortname"
-
 [markup.highlight]
 style = "github-dark"
 
@@ -16,9 +14,9 @@ style = "github-dark"
   info = "Discord Bot Developer"
   description = "The personal website of folospior, also known as Folo or fo1o."
   keywords = "blog,developer,personal"
-  avatarurl = "img/avatar.jpg"
+  avatarurl = "img/avatar.jpg/"
 
-  faviconSVG = "img/favicon.svg"
+  faviconSVG = "img/favicon.svg/"
 
   since = 2023
 
@@ -52,7 +50,7 @@ style = "github-dark"
     name = "Website Source"
     icon = "fa fa-globe fa-2x"
     weight = 3
-    url = "source"
+    url = "source/"
 
 # Menu links
 [[menu.main]]
