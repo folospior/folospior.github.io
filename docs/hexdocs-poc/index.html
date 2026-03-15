@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>grom/interaction · grom · v5.1.3</title>
+<style>
+  /* ── Gleam palette ── */
+  :root {
+    --pink:        #ffaff3;
+    --pink-dark:   #e88fd8;
+    --bg:          #1e1e2e;
+    --bg2:         #27273a;
+    --bg3:         #313147;
+    --surface:     #2a2a3d;
+    --border:      #3d3d57;
+    --text:        #cdd6f4;
+    --text-dim:    #a6adc8;
+    --text-faint:  #6c7086;
+    --link:        #ffaff3;
+    --link-hover:  #f5c2e7;
+    --fn-color:    #89dceb;
+    --type-color:  #cba6f7;
+    --keyword:     #f38ba8;
+    --string:      #a6e3a1;
+    --number:      #fab387;
+    --code-bg:     #181825;
+    --sidebar-w:   16rem;
+    --sidebar-min: 14rem;
+    --sidebar-max: 42rem;
+    --handle-w:    5px;
+    --transition:  260ms cubic-bezier(.4,0,.2,1);
+    --sidebar-open: 1; /* JS toggles this */
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 15px; }
+
+  body {
+    font-family: 'IBM Plex Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Sidebar shell ── */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-min);
+    max-width: var(--sidebar-max);
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    transform: translateX(calc(-1 * var(--sidebar-w) - var(--handle-w) - 2px));
+    transition: transform var(--transition), width var(--transition);
+    will-change: transform;
+    overflow: hidden;
+  }
+
+  /* open state — JS adds .open class */
+  #sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* ── Resize handle ── */
+  #resize-handle {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: var(--handle-w);
+    cursor: col-resize;
+    background: transparent;
+    transition: background 150ms;
+    z-index: 10;
+  }
+  #resize-handle:hover,
+  #resize-handle.dragging {
+    background: var(--pink);
+    opacity: .5;
+  }
+
+  /* ── Sidebar header ── */
+  .sidebar-header {
+    padding: 1rem 1rem .75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar-header .pkg-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--pink);
+    letter-spacing: -.01em;
+  }
+  .sidebar-header .pkg-version {
+    font-size: .72rem;
+    color: var(--text-faint);
+    margin-top: .15rem;
+  }
+
+  /* ── Search ── */
+  .sidebar-search {
+    padding: .6rem .75rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar-search input {
+    width: 100%;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: .8rem;
+    padding: .35rem .6rem;
+    outline: none;
+    transition: border-color 150ms;
+  }
+  .sidebar-search input:focus { border-color: var(--pink); }
+  .sidebar-search input::placeholder { color: var(--text-faint); }
+
+  /* ── Nav scroll area ── */
+  .sidebar-nav {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    padding: .5rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* ── Section headers ── */
+  .nav-section-header {
+    padding: .65rem .85rem .25rem;
+    font-size: .67rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    user-select: none;
+  }
+
+  /* ── Nav links ── */
+  .nav-link {
+    display: block;
+    padding: .25rem .85rem;
+    font-size: .78rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 120ms, background 120ms;
+    border-left: 2px solid transparent;
+    line-height: 1.5;
+  }
+  .nav-link:hover {
+    color: var(--text);
+    background: var(--bg3);
+    border-left-color: var(--border);
+  }
+  .nav-link.active {
+    color: var(--pink);
+    background: rgba(255,175,243,.07);
+    border-left-color: var(--pink);
+  }
+
+  /* Nesting depth via indent */
+  .nav-link[data-depth="1"] { padding-left: 1.6rem; }
+  .nav-link[data-depth="2"] { padding-left: 2.3rem; }
+
+  /* ── Hamburger button ── */
+  #hamburger {
+    position: fixed;
+    top: .8rem;
+    left: .8rem;
+    z-index: 300;
+    width: 2.2rem;
+    height: 2.2rem;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 4px;
+    padding: 6px;
+    transition: border-color 150ms, left var(--transition);
+  }
+  #hamburger:hover { border-color: var(--pink); }
+  #hamburger span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--text-dim);
+    border-radius: 2px;
+    transition: background 150ms, transform 250ms, opacity 250ms;
+    transform-origin: center;
+  }
+  /* hamburger → X when open */
+  #hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  #hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+  #hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+  #hamburger.open span { background: var(--pink); }
+
+  /* ── Edge-hover trigger zone ── */
+  #edge-trigger {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 80px;
+    z-index: 100;
+    cursor: default;
+  }
+
+  /* ── Backdrop (mobile) ── */
+  #backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 150;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  #backdrop.visible {
+    display: block;
+    opacity: 1;
+  }
+
+  /* ── Main content ── */
+  #main {
+    margin-left: 3.2rem;
+    min-height: 100vh;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .65rem 2rem .65rem 3.8rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky; top: 0; z-index: 50;
+    font-size: .78rem;
+  }
+  .topbar .breadcrumb { color: var(--text-faint); }
+  .topbar .breadcrumb a { color: var(--link); text-decoration: none; }
+  .topbar .breadcrumb a:hover { color: var(--link-hover); text-decoration: underline; }
+  .topbar .version-badge {
+    margin-left: auto;
+    background: rgba(255,175,243,.12);
+    border: 1px solid rgba(255,175,243,.25);
+    border-radius: 4px;
+    padding: .15rem .45rem;
+    font-size: .7rem;
+    color: var(--pink);
+  }
+
+  /* ── Content area ── */
+  .content {
+    max-width: 860px;
+    padding: 2rem 2.5rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    color: var(--pink);
+    margin-bottom: .4rem;
+    letter-spacing: -.02em;
+  }
+  h2 {
+    font-size: 1.15rem;
+    color: var(--text);
+    margin: 2rem 0 .75rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -.01em;
+  }
+  h3 {
+    font-size: .95rem;
+    color: var(--text-dim);
+    margin: 1.25rem 0 .4rem;
+  }
+
+  p { color: var(--text-dim); line-height: 1.7; margin-bottom: .85rem; font-size: .875rem; }
+
+  /* ── Definition blocks ── */
+  .def-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .def-header {
+    padding: .7rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: .6rem;
+    flex-wrap: wrap;
+  }
+  .def-kind {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    padding: .15rem .4rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: .1rem;
+  }
+  .def-kind.fn   { background: rgba(137,220,235,.15); color: var(--fn-color); border: 1px solid rgba(137,220,235,.25); }
+  .def-kind.type { background: rgba(203,166,247,.15); color: var(--type-color); border: 1px solid rgba(203,166,247,.25); }
+
+  .def-sig {
+    font-size: .82rem;
+    color: var(--text);
+    word-break: break-word;
+    flex: 1;
+    line-height: 1.6;
+  }
+  .def-sig .kw  { color: var(--keyword); }
+  .def-sig .nm  { color: var(--fn-color); }
+  .def-sig .tp  { color: var(--type-color); }
+  .def-sig .st  { color: var(--string); }
+  .def-sig .nb  { color: var(--number); }
+  .def-sig .op  { color: var(--text-faint); }
+
+  .def-body {
+    padding: .75rem 1rem;
+  }
+  .def-body p { margin-bottom: .5rem; font-size: .83rem; }
+  .def-body p:last-child { margin-bottom: 0; }
+
+  /* ── Inline code ── */
+  code {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: .1em .35em;
+    font-size: .82em;
+    font-family: inherit;
+    color: var(--pink-dark);
+  }
+
+  /* ── Code block ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .9rem 1.1rem;
+    overflow-x: auto;
+    font-size: .8rem;
+    line-height: 1.65;
+    margin: .75rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; color: var(--text); }
+
+  /* ── Section anchor links ── */
+  .anchor-link {
+    display: inline-block;
+    color: var(--text-faint);
+    text-decoration: none;
+    margin-left: .4rem;
+    opacity: 0;
+    transition: opacity 120ms;
+    font-size: .85em;
+  }
+  h2:hover .anchor-link,
+  .def-header:hover .anchor-link { opacity: 1; }
+
+  /* ── Mobile ── */
+  @media (max-width: 768px) {
+    body.sidebar-pinned #main { margin-left: 0; }
+    body.sidebar-pinned #hamburger { left: .8rem; display: flex; }
+
+    .content { padding: 1.2rem 1rem; }
+    .topbar { padding-left: 3.4rem; }
+
+    #sidebar.open { width: min(var(--sidebar-w), 90vw) !important; }
+
+    /* On mobile: truncate nav links, rely on ellipsis */
+    .nav-link { max-width: 100%; }
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+  /* ── Notification toast (for resize auto-fit) ── */
+  #toast {
+    position: fixed;
+    bottom: 1.2rem; right: 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .55rem .9rem;
+    font-size: .75rem;
+    color: var(--text-dim);
+    z-index: 500;
+    transform: translateY(6px);
+    opacity: 0;
+    transition: opacity 250ms, transform 250ms;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── Tooltip ── */
+  [data-tooltip] { position: relative; }
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%; transform: translateX(-50%);
+    white-space: nowrap;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: .2rem .5rem;
+    font-size: .68rem;
+    color: var(--text-dim);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms;
+    z-index: 999;
+  }
+  [data-tooltip]:hover::after { opacity: 1; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ── Edge hover trigger ── -->
+<div id="edge-trigger"></div>
+
+<!-- ── Backdrop ── -->
+<div id="backdrop"></div>
+
+<!-- ── Hamburger ── -->
+<button id="hamburger" aria-label="Toggle sidebar" aria-expanded="false">
+  <span></span><span></span><span></span>
+</button>
+
+<!-- ════════════════════════════════
+     SIDEBAR
+════════════════════════════════ -->
+<nav id="sidebar" role="navigation" aria-label="Documentation navigation">
+  <div class="sidebar-header">
+    <div class="pkg-name">✨ grom</div>
+    <div class="pkg-version">v5.1.3</div>
+  </div>
+
+  <div class="sidebar-search">
+    <input type="search" id="nav-search" placeholder="Search…" aria-label="Filter navigation">
+  </div>
+
+  <div class="sidebar-nav" id="sidebar-nav">
+    <div class="nav-section-header">Pages</div>
+    <a class="nav-link" href="#" data-depth="0">README</a>
+
+    <div class="nav-section-header">Links</div>
+    <a class="nav-link" href="#" data-depth="0">Repository ↗</a>
+    <a class="nav-link" href="#" data-depth="0">Hex ↗</a>
+
+    <div class="nav-section-header">Modules</div>
+    <a class="nav-link" href="#" data-depth="0">grom</a>
+    <a class="nav-link" href="#" data-depth="0">grom/activity</a>
+    <a class="nav-link" href="#" data-depth="0">grom/application</a>
+    <a class="nav-link" href="#" data-depth="1">grom/application/current_application</a>
+    <a class="nav-link" href="#" data-depth="1">grom/application/role_connection_metadata</a>
+    <a class="nav-link" href="#" data-depth="1">grom/application/team</a>
+    <a class="nav-link" href="#" data-depth="0">grom/channel</a>
+    <a class="nav-link" href="#" data-depth="1">grom/channel/forum</a>
+    <a class="nav-link" href="#" data-depth="1">grom/channel/media</a>
+    <a class="nav-link" href="#" data-depth="1">grom/channel/permission_overwrite</a>
+    <a class="nav-link" href="#" data-depth="1">grom/channel/thread</a>
+    <a class="nav-link" href="#" data-depth="0">grom/command</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/action_row</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/button</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/channel_select</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/checkbox</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/checkbox_group</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/container</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/file</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/file_upload</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/label</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/media_gallery</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/mentionable_select</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/radio_group</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/role_select</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/section</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/separator</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/string_select</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/text_display</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/text_input</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/unfurled_media_item</a>
+    <a class="nav-link" href="#" data-depth="0">grom/component/user_select</a>
+    <a class="nav-link" href="#" data-depth="0">grom/emoji</a>
+    <a class="nav-link" href="#" data-depth="0">grom/entitlement</a>
+    <a class="nav-link" href="#" data-depth="0">grom/file</a>
+    <a class="nav-link" href="#" data-depth="0">grom/gateway</a>
+    <a class="nav-link" href="#" data-depth="1">grom/gateway/intent</a>
+    <a class="nav-link" href="#" data-depth="0">grom/guild</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/audit_log</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/auto_moderation</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/integration</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/onboarding</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/role</a>
+    <a class="nav-link" href="#" data-depth="1">grom/guild/scheduled_event</a>
+    <a class="nav-link" href="#" data-depth="2">grom/guild/scheduled_event/recurrence_rule</a>
+    <a class="nav-link" href="#" data-depth="0">grom/guild_member</a>
+    <a class="nav-link" href="#" data-depth="0">grom/image</a>
+    <a class="nav-link active" href="#" data-depth="0">grom/interaction</a>
+    <a class="nav-link" href="#" data-depth="0">grom/invite</a>
+    <a class="nav-link" href="#" data-depth="0">grom/message</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/activity</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/allowed_mentions</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/attachment</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/call</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/embed</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/interaction_metadata</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/message_reference</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/poll</a>
+    <a class="nav-link" href="#" data-depth="1">grom/message/reaction</a>
+    <a class="nav-link" href="#" data-depth="0">grom/modal</a>
+    <a class="nav-link" href="#" data-depth="0">grom/modification</a>
+    <a class="nav-link" href="#" data-depth="0">grom/permission</a>
+    <a class="nav-link" href="#" data-depth="0">grom/sku</a>
+    <a class="nav-link" href="#" data-depth="0">grom/snowflake</a>
+    <a class="nav-link" href="#" data-depth="0">grom/soundboard</a>
+    <a class="nav-link" href="#" data-depth="0">grom/stage_instance</a>
+    <a class="nav-link" href="#" data-depth="0">grom/sticker</a>
+    <a class="nav-link" href="#" data-depth="0">grom/subscription</a>
+    <a class="nav-link" href="#" data-depth="0">grom/user</a>
+    <a class="nav-link" href="#" data-depth="1">grom/user/current_user</a>
+    <a class="nav-link" href="#" data-depth="0">grom/voice</a>
+    <a class="nav-link" href="#" data-depth="0">grom/webhook</a>
+    <a class="nav-link" href="#" data-depth="0">grom/webhook_event</a>
+  </div>
+
+  <div id="resize-handle" title="Drag to resize · Double-click to auto-fit"></div>
+</nav>
+
+<!-- ════════════════════════════════
+     MAIN
+════════════════════════════════ -->
+<div id="main">
+  <div class="topbar">
+    <span class="breadcrumb">
+      <a href="#">grom</a> / interaction
+    </span>
+    <span class="version-badge">v5.1.3</span>
+  </div>
+
+  <div class="content">
+    <h1>grom/interaction</h1>
+    <p>Types and functions for working with Discord interactions — slash commands, component callbacks, modals, and more.</p>
+
+    <!-- ── Types ── -->
+    <h2>Types <a class="anchor-link" href="#types" aria-hidden="true">#</a></h2>
+
+    <div class="def-block" id="Interaction">
+      <div class="def-header">
+        <span class="def-kind type">type</span>
+        <span class="def-sig">
+          <span class="kw">pub type</span> <span class="tp">Interaction</span>
+        </span>
+        <a class="anchor-link" href="#Interaction" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Represents a Discord interaction. This is the base type sent whenever a user triggers an interaction.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="InteractionData">
+      <div class="def-header">
+        <span class="def-kind type">type</span>
+        <span class="def-sig">
+          <span class="kw">pub type</span> <span class="tp">InteractionData</span>
+        </span>
+        <a class="anchor-link" href="#InteractionData" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>The data payload of an interaction. The content varies based on the interaction type.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="ApplicationCommandInteractionDataOption">
+      <div class="def-header">
+        <span class="def-kind type">type</span>
+        <span class="def-sig">
+          <span class="kw">pub type</span> <span class="tp">ApplicationCommandInteractionDataOption</span>
+        </span>
+        <a class="anchor-link" href="#ApplicationCommandInteractionDataOption" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>An individual option passed to a slash command. Contains the name, type, and value of the option as provided by the user.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="MessageComponentInteractionData">
+      <div class="def-header">
+        <span class="def-kind type">type</span>
+        <span class="def-sig">
+          <span class="kw">pub type</span> <span class="tp">MessageComponentInteractionData</span>
+        </span>
+        <a class="anchor-link" href="#MessageComponentInteractionData" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Data from a message component interaction, such as a button click or select menu choice.</p>
+      </div>
+    </div>
+
+    <!-- ── Functions ── -->
+    <h2>Functions <a class="anchor-link" href="#functions" aria-hidden="true">#</a></h2>
+
+    <div class="def-block" id="reply">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">reply</span><span class="op">(</span>interaction<span class="op">:</span> <span class="tp">Interaction</span><span class="op">,</span> message<span class="op">:</span> <span class="tp">Message</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Nil</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#reply" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Send a reply to an interaction. Must be called within 3 seconds, otherwise use <code>defer_reply</code>.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="defer_reply">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">defer_reply</span><span class="op">(</span>interaction<span class="op">:</span> <span class="tp">Interaction</span><span class="op">,</span> ephemeral<span class="op">:</span> <span class="tp">Bool</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Nil</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#defer_reply" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Acknowledge an interaction with a deferred response, showing a loading state. Follow up with <code>edit_original_response</code>.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="edit_original_response">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">edit_original_response</span><span class="op">(</span>interaction<span class="op">:</span> <span class="tp">Interaction</span><span class="op">,</span> message<span class="op">:</span> <span class="tp">Message</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Nil</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#edit_original_response" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Edit the original response to an interaction. Used after a deferred reply to send the actual content.</p>
+      </div>
+    </div>
+
+    <!-- The long one from the proposal -->
+    <div class="def-block" id="create_followup_message_with_options">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">create_followup_message_with_options</span><span class="op">(</span>interaction<span class="op">:</span> <span class="tp">Interaction</span><span class="op">,</span> content<span class="op">:</span> <span class="tp">Option</span><span class="op">(</span><span class="tp">String</span><span class="op">),</span> embeds<span class="op">:</span> <span class="tp">Option</span><span class="op">(</span><span class="tp">List</span><span class="op">(</span><span class="tp">Embed</span><span class="op">)),</span> ephemeral<span class="op">:</span> <span class="tp">Bool</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Message</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#create_followup_message_with_options" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Create a followup message to an interaction with fine-grained control over content, embeds, and visibility. This is the long function definition that motivated the improved sidebar — it should never be word-wrapped mid-identifier.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="respond_to_autocomplete_interaction">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">respond_to_autocomplete_interaction</span><span class="op">(</span>interaction<span class="op">:</span> <span class="tp">Interaction</span><span class="op">,</span> choices<span class="op">:</span> <span class="tp">List</span><span class="op">(</span><span class="tp">ApplicationCommandOptionChoice</span><span class="op">))</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Nil</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#respond_to_autocomplete_interaction" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Respond to an autocomplete interaction with a list of choices to show to the user.</p>
+      </div>
+    </div>
+
+    <div class="def-block" id="get_original_interaction_response">
+      <div class="def-header">
+        <span class="def-kind fn">fn</span>
+        <span class="def-sig">
+          <span class="kw">pub fn</span> <span class="nm">get_original_interaction_response</span><span class="op">(</span>application_id<span class="op">:</span> <span class="tp">Snowflake</span><span class="op">,</span> interaction_token<span class="op">:</span> <span class="tp">String</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="tp">Result</span><span class="op">(</span><span class="tp">Message</span><span class="op">,</span> <span class="tp">RestError</span><span class="op">)</span>
+        </span>
+        <a class="anchor-link" href="#get_original_interaction_response" aria-hidden="true">#</a>
+      </div>
+      <div class="def-body">
+        <p>Retrieve the original response message for an interaction using the application ID and token.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Elements ── */
+  const sidebar      = document.getElementById('sidebar');
+  const hamburger    = document.getElementById('hamburger');
+  const backdrop     = document.getElementById('backdrop');
+  const resizeHandle = document.getElementById('resize-handle');
+  const mainEl       = document.getElementById('main');
+  const navLinks     = document.querySelectorAll('.nav-link');
+  const navSearch    = document.getElementById('nav-search');
+  const toast        = document.getElementById('toast');
+  const edgeTrigger  = document.getElementById('edge-trigger');
+
+  /* ── State ── */
+  // openedVia: null | 'edge' | 'button'
+  let openedVia  = null;
+  let toastTimer = null;
+  const isMobile = () => window.innerWidth <= 768;
+
+  /* ── Toast ── */
+  function showToast(msg, ms = 2400) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), ms);
+  }
+
+  /* ── Open / close ── */
+  function openSidebar(via) {
+    openedVia = via;
+    sidebar.classList.add('open');
+    hamburger.classList.add('open');
+    hamburger.setAttribute('aria-expanded', 'true');
+    if (isMobile()) backdrop.classList.add('visible');
+  }
+
+  function closeSidebar() {
+    openedVia = null;
+    sidebar.classList.remove('open');
+    hamburger.classList.remove('open');
+    hamburger.setAttribute('aria-expanded', 'false');
+    backdrop.classList.remove('visible');
+  }
+
+  /* ── Hamburger button ──
+     Always toggles. If currently open via edge, clicking button
+     takes ownership (button press must close it next). */
+  hamburger.addEventListener('click', () => {
+    if (openedVia === 'button') {
+      closeSidebar();
+    } else {
+      openSidebar('button');
+    }
+  });
+
+  /* ── Edge hover ── */
+  let edgeTimer = null;
+
+  edgeTrigger.addEventListener('mouseenter', () => {
+    // Don't interfere if already open via button
+    if (openedVia === 'button') return;
+    clearTimeout(edgeTimer);
+    edgeTimer = setTimeout(() => {
+      if (openedVia !== 'button') openSidebar('edge');
+    }, 160);
+  });
+
+  edgeTrigger.addEventListener('mouseleave', () => {
+    clearTimeout(edgeTimer);
+  });
+
+  /* Close on cursor leaving the sidebar — only when opened via edge */
+  sidebar.addEventListener('mouseleave', () => {
+    if (openedVia === 'edge') closeSidebar();
+  });
+
+  /* ── Backdrop click (mobile) ── */
+  backdrop.addEventListener('click', () => closeSidebar());
+
+  /* ── Escape key ── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && openedVia) closeSidebar();
+  });
+
+  /* ── Resize drag ── */
+  (function setupResize() {
+    let dragging = false;
+    let startX, startW;
+
+    resizeHandle.addEventListener('mousedown', e => {
+      dragging = true;
+      startX = e.clientX;
+      startW = sidebar.offsetWidth;
+      resizeHandle.classList.add('dragging');
+      document.body.style.cssText += 'cursor:col-resize;user-select:none;';
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const minPx = 224, maxPx = 672;
+      const newW = Math.min(maxPx, Math.max(minPx, startW + (e.clientX - startX)));
+      sidebar.style.width = newW + 'px';
+      document.documentElement.style.setProperty('--sidebar-w', newW + 'px');
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      resizeHandle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+
+    /* Double-click → auto-fit to longest link */
+    resizeHandle.addEventListener('dblclick', () => {
+      const links = document.querySelectorAll('#sidebar-nav .nav-link');
+      const probe = document.createElement('span');
+      probe.style.cssText = 'visibility:hidden;position:absolute;white-space:nowrap;font-family:inherit;font-size:0.78rem;left:-9999px;top:-9999px;';
+      document.body.appendChild(probe);
+
+      let maxW = 0;
+      links.forEach(link => {
+        probe.textContent = link.textContent.trim();
+        const depth = parseInt(link.dataset.depth || 0);
+        const padL = [13.6, 25.6, 36.8][depth] ?? 13.6;
+        maxW = Math.max(maxW, probe.offsetWidth + padL + 13.6);
+      });
+      document.body.removeChild(probe);
+
+      const targetW = Math.min(672, Math.max(224, maxW + 24));
+      sidebar.style.width = targetW + 'px';
+      document.documentElement.style.setProperty('--sidebar-w', targetW + 'px');
+      showToast(`Auto-fitted to ${Math.round(targetW)}px`);
+    });
+  })();
+
+  /* ── Nav search filter ── */
+  navSearch.addEventListener('input', () => {
+    const q = navSearch.value.trim().toLowerCase();
+    navLinks.forEach(link => {
+      link.style.display = link.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-section-header').forEach(header => {
+      let next = header.nextElementSibling;
+      let anyVisible = false;
+      while (next && !next.classList.contains('nav-section-header')) {
+        if (next.style.display !== 'none') anyVisible = true;
+        next = next.nextElementSibling;
+      }
+      header.style.display = anyVisible ? '' : 'none';
+    });
+  });
+
+  /* ── Nav link click ── */
+  navLinks.forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      navLinks.forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+      if (isMobile()) closeSidebar();
+    });
+  });
+
+  /* ── Scroll active link into view on load ── */
+  const activeLink = document.querySelector('.nav-link.active');
+  if (activeLink) {
+    requestAnimationFrame(() => activeLink.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  }
+
+  /* ── First-visit hint ── */
+  if (!localStorage.getItem('sidebar-hint-seen') && !isMobile()) {
+    setTimeout(() => {
+      showToast('💡 Hover left edge to peek · Hamburger to pin open · Double-click handle to auto-fit', 3800);
+      localStorage.setItem('sidebar-hint-seen', '1');
+    }, 900);
+  }
+})();
+</script>
+</body>
+</html>
