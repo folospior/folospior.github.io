@@ -820,26 +820,34 @@
 
     /* Double-click → auto-fit to longest link */
     resizeHandle.addEventListener('dblclick', () => {
-      const links = document.querySelectorAll('#sidebar-nav .nav-link');
-      const probe = document.createElement('span');
-      probe.style.cssText = 'visibility:hidden;position:absolute;white-space:nowrap;font-family:inherit;font-size:0.78rem;left:-9999px;top:-9999px;';
-      document.body.appendChild(probe);
-
-      let maxW = 0;
-      links.forEach(link => {
-        probe.textContent = link.textContent.trim();
-        const depth = parseInt(link.dataset.depth || 0);
-        const padL = [13.6, 25.6, 36.8][depth] ?? 13.6;
-        maxW = Math.max(maxW, probe.offsetWidth + padL + 13.6);
-      });
-      document.body.removeChild(probe);
-
-      const targetW = Math.min(672, Math.max(224, maxW + 24));
-      sidebar.style.width = targetW + 'px';
-      document.documentElement.style.setProperty('--sidebar-w', targetW + 'px');
-      showToast(`Auto-fitted to ${Math.round(targetW)}px`);
+      autoFitWidth();
+      showToast(`Auto-fitted to ${Math.round(sidebar.offsetWidth)}px`);
     });
   })();
+
+  /* ── Auto-fit: size sidebar to longest nav link ── */
+  function autoFitWidth() {
+    const links = document.querySelectorAll('#sidebar-nav .nav-link');
+    const probe = document.createElement('span');
+    probe.style.cssText = 'visibility:hidden;position:absolute;white-space:nowrap;font-family:inherit;font-size:0.78rem;left:-9999px;top:-9999px;';
+    document.body.appendChild(probe);
+
+    let maxW = 0;
+    links.forEach(link => {
+      probe.textContent = link.textContent.trim();
+      const depth = parseInt(link.dataset.depth || 0);
+      const padL = [13.6, 25.6, 36.8][depth] ?? 13.6;
+      maxW = Math.max(maxW, probe.offsetWidth + padL + 13.6);
+    });
+    document.body.removeChild(probe);
+
+    const targetW = Math.min(672, Math.max(224, maxW + 24));
+    sidebar.style.width = targetW + 'px';
+    document.documentElement.style.setProperty('--sidebar-w', targetW + 'px');
+  }
+
+  /* Run once immediately so the width is correct before the first open */
+  autoFitWidth();
 
   /* ── Nav search filter ── */
   navSearch.addEventListener('input', () => {
